@@ -72,6 +72,9 @@ func TestConstraintCheck(t *testing.T) {
 		{"<=1.1.0", "0.1.0", true},
 		{"<=1.1.0", "1.1.0", true},
 		{"<=1.1.0", "1.1.1", false},
+		{"~0.0.0", "0.0.1", true},
+		{"~0.0.0", "0.0.10", true},
+		{"~0.0.0", "0.1.1", false},
 	}
 
 	for _, tc := range tests {
@@ -106,9 +109,10 @@ func TestNewConstraint(t *testing.T) {
 		{">= bar", 0, 0, true},
 		{">= 1.2.3 < 2.0", 1, 2, false},
 		{">= 1.2.3 < 2.0 || => 3.0 < 4", 2, 2, false},
+		{"~1.2.3-4", 1, 1, false},
 
 		// The 3-4 should be broken into 2 by the range rewriting
-		{"3-4 || => 3.0 < 4", 2, 2, false},
+		{"3 - 4 || => 3.0 < 4", 2, 2, false},
 	}
 
 	for _, tc := range tests {
@@ -145,7 +149,7 @@ func TestConstraintsCheck(t *testing.T) {
 		check      bool
 	}{
 		{"*", "1.2.3", true},
-		{"~0.0.0", "1.2.3", true},
+		{"~0.0.0", "1.2.3", false},
 		{"= 2.0", "1.2.3", false},
 		{"= 2.0", "2.0.0", true},
 		{"4.1", "4.1.0", true},
@@ -227,8 +231,8 @@ func TestRewriteRange(t *testing.T) {
 		c  string
 		nc string
 	}{
-		{"2-3", ">= 2 <= 3"},
-		{"2-3 4.0.0-5.1", ">= 2 <= 3 >= 4.0.0 <= 5.1"},
+		{"2 - 3", ">= 2 <= 3"},
+		{"2 - 3 4.0.0 - 5.1", ">= 2 <= 3 >= 4.0.0 <= 5.1"},
 	}
 
 	for _, tc := range tests {
@@ -267,7 +271,7 @@ func TestConstraintsValidate(t *testing.T) {
 		check      bool
 	}{
 		{"*", "1.2.3", true},
-		{"~0.0.0", "1.2.3", true},
+		{"~0.0.0", "1.2.3", false},
 		{"= 2.0.0", "1.2.3", false},
 		{"= 2.0.0", "2.0.0", true},
 		{"4.1", "4.1.0", true},
@@ -339,7 +343,7 @@ func TestConstraintsValidate(t *testing.T) {
 
 		a, msgs := c.Validate(v)
 		if a != tc.check {
-			t.Errorf("Constraint '%s' failing with '%s'", tc.constraint, tc.version)
+			t.Errorf("Constraint '%s' failing with '%s' [msgs: %V]", tc.constraint, tc.version, msgs)
 		} else if a == false && len(msgs) == 0 {
 			t.Errorf("%q failed with %q but no errors returned", tc.constraint, tc.version)
 		}
@@ -394,7 +398,7 @@ func TestConstraintsValidate(t *testing.T) {
 		{">=1.1.0 <2.0.0 !=1.2.3", "1.2.3", "1.2.3 is equal to 1.2.3"},
 		{">=1.1.0 <2.0.0 !=1.2.3 || > 3", "3.0.0", "3.0.0 is greater than or equal to 2.0.0"},
 		{">=1.1.0 <2.0.0 !=1.2.3 || > 3", "1.2.3", "1.2.3 is equal to 1.2.3"},
-		{"1.1-3", "4.3.2", "4.3.2 is greater than 3"},
+		{"1.1 - 3", "4.3.2", "4.3.2 is greater than 3"},
 		{"^1.1", "4.3.2", "4.3.2 does not have same major version as 1.1"},
 		{"^2.x", "1.1.1", "1.1.1 does not have same major version as 2.x"},
 		{"^1.x", "2.1.1", "2.1.1 does not have same major version as 1.x"},

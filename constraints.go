@@ -18,20 +18,22 @@ type Constraints struct {
 func NewConstraint(c string) (*Constraints, error) {
 
 	// Rewrite - ranges into a comparison operation.
+	// TODO(KR): Fix ranges
 	c = rewriteRange(c)
 
-  ors := strings.Split(c, "||")
+	ors := strings.Split(c, "||")
 	or := make([][]*constraint, len(ors))
 	for k, v := range ors {
 		ands := constraintUnboundedRegex.FindAllString(v, -1)
 
-    // Validate logical "and" sequence: Remove all legal primitive constraints and whitespace
-    // If the resulting string is not empty, there was an illegal character in there somewhere
-    unexpected := strings.Trim(constraintUnboundedRegex.ReplaceAllLiteralString(v, " "), " "); if unexpected != "" {
-      return nil, errors.New(fmt.Sprintf("Unexpected character in constraint %s: %s", c, unexpected))
-    }
+		// Validate logical "and" sequence: Remove all legal primitive constraints and whitespace
+		// If the resulting string is not empty, there was an illegal character in there somewhere
+		unexpected := strings.Trim(constraintUnboundedRegex.ReplaceAllLiteralString(v, " "), " ")
+		if unexpected != "" {
+			return nil, errors.New(fmt.Sprintf("Unexpected character in constraint %s: %s", c, unexpected))
+		}
 
-    result := make([]*constraint, len(ands))
+		result := make([]*constraint, len(ands))
 		for i, s := range ands {
 			pc, err := parseConstraint(s)
 			if err != nil {
@@ -135,14 +137,14 @@ func init() {
 		`^\s*(%s)\s*(%s)\s*$`,
 		strings.Join(ops, "|"),
 		cvRegex))
-	
-  constraintUnboundedRegex = regexp.MustCompile(fmt.Sprintf(
+
+	constraintUnboundedRegex = regexp.MustCompile(fmt.Sprintf(
 		`(%s)\s*(%s)`,
 		strings.Join(ops, "|"),
 		cvRegex))
 
 	constraintRangeRegex = regexp.MustCompile(fmt.Sprintf(
-		`(%s)\s*-\s*(%s)`,
+		`(%s)\s+-\s+(%s)`,
 		cvRegex, cvRegex))
 }
 
@@ -190,7 +192,7 @@ func parseConstraint(c string) (*constraint, error) {
 		minorDirty = true
 		dirty = true
 		ver = fmt.Sprintf("%s.0.0%s", m[3], m[6])
-	} else if isX(strings.TrimPrefix(m[5], ".")) || strings.TrimPrefix(m[5], ".") == ""{
+	} else if isX(strings.TrimPrefix(m[5], ".")) || strings.TrimPrefix(m[5], ".") == "" {
 		dirty = true
 		ver = fmt.Sprintf("%s%s.0%s", m[3], m[4], m[6])
 	}
@@ -279,9 +281,9 @@ func constraintTilde(v *Version, c *constraint) bool {
 		return false
 	}
 
-	// ~0.0.0 is a special case where all constraints are accepted. It's
+	// ~* and * are where all constraints are accepted. It's
 	// equivalent to >= 0.0.0.
-	if c.con.Major() == 0 && c.con.Minor() == 0 && c.con.Patch() == 0 {
+	if c.dirty && c.con.Major() == 0 && c.con.Minor() == 0 && c.con.Patch() == 0 {
 		return true
 	}
 
@@ -313,6 +315,8 @@ func constraintTildeOrEqual(v *Version, c *constraint) bool {
 // ^1.2, ^1.2.x --> >=1.2.0, <2.0.0
 // ^1.2.3 --> >=1.2.3, <2.0.0
 // ^1.2.0 --> >=1.2.0, <2.0.0
+// ^0.2.0 --> >=0.2.0, <0.3.0
+// ^0.0.2 --> =0.0.2
 func constraintCaret(v *Version, c *constraint) bool {
 	if v.LessThan(c.con) {
 		return false
@@ -321,15 +325,23 @@ func constraintCaret(v *Version, c *constraint) bool {
 	if v.Major() != c.con.Major() {
 		return false
 	}
+	if c.con.Major() == 0 {
+		if v.Minor() != c.con.Minor() {
+			return false
+		}
+		if v.Minor() == 0 {
+			if v.Patch() != c.con.Patch() {
+				return false
+			}
+		}
+	}
 
 	return true
 }
 
 var constraintRangeRegex *regexp.Regexp
 
-const cvRegex string = `v?([0-9|x|X|\*]+)(\.[0-9|x|X|\*]+)?(\.[0-9|x|X|\*]+)?` +
-	`(-([0-9A-Za-z\-]+(\.[0-9A-Za-z\-]+)*))?` +
-	`(\+([0-9A-Za-z\-]+(\.[0-9A-Za-z\-]+)*))?`
+const cvRegex string = `v?([0-9|x|X|\*]+)(\.[0-9|x|X|\*]+)?(\.[0-9|x|X|\*]+)?(-([0-9A-Za-z\-]+(\.[0-9A-Za-z\-]+)*))?(\+([0-9A-Za-z\-]+(\.[0-9A-Za-z\-]+)*))?`
 
 func isX(x string) bool {
 	switch x {
